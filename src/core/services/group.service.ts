@@ -1,7 +1,11 @@
-import { GroupModel } from "../data/group";
+import { GroupModel, IGroup } from "../data/group";
 
 export const getAll = async () => {
   const groups = await GroupModel.find();
-  console.log("getting all groups", groups);
+  return groups;
+};
+
+export const getAllWithRoomsPopulated = async () => {
+  const groups = await GroupModel.find().populate("rooms");
   return groups;
 };

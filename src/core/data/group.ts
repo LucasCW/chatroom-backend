@@ -1,28 +1,9 @@
-import { Model, Schema, model } from "mongoose";
+import { Model, Schema, Types, model } from "mongoose";
+import { createRoom } from "./room";
 
-interface IRoom {
+export interface IGroup {
   name: string;
-  path: string;
-}
-
-interface IRoomModel extends Model<IRoom> {}
-
-const IRoomSchema = new Schema<IRoom, IRoomModel>({
-  name: {
-    type: String,
-    required: true,
-  },
-  path: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-});
-
-interface IGroup {
-  name: string;
-  path: string;
-  rooms: IRoom[];
+  rooms: Types.ObjectId[];
 }
 
 interface IGroupModel extends Model<IGroup> {}
@@ -32,13 +13,9 @@ const IGroupSchema = new Schema<IGroup, IGroupModel>({
     type: String,
     required: true,
   },
-  path: {
-    type: String,
-    required: true,
-    unique: true,
-  },
   rooms: {
-    type: [IRoomSchema],
+    type: [Schema.Types.ObjectId],
+    ref: "room",
     required: true,
     default: [],
   },
@@ -46,14 +23,13 @@ const IGroupSchema = new Schema<IGroup, IGroupModel>({
 
 export const GroupModel = model("group", IGroupSchema);
 
-export const createGroup = () => {
+export const createGroup = async (groupName: string) => {
+  const room1 = await createRoom(groupName + " Room 1", "room1");
+  const room2 = await createRoom(groupName + " Room 2", "room2");
+
   const group = new GroupModel({
-    name: "Group 2",
-    path: "group2",
-    rooms: [
-      { name: "Room 1", path: "room1" },
-      { name: "Room 2", path: "room2" },
-    ],
+    name: groupName,
+    rooms: [room1._id, room2._id],
   });
 
   group.save().then((res) => console.log("Create Group: ", res));
