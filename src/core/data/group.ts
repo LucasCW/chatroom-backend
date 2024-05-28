@@ -1,7 +1,7 @@
-import { Model, Schema, Types, model } from "mongoose";
+import { Model, Schema, Types, model, Document } from "mongoose";
 import { createRoom } from "./room";
 
-export interface IGroup {
+export interface IGroup extends Document<Types.ObjectId> {
   name: string;
   rooms: Types.ObjectId[];
 }
