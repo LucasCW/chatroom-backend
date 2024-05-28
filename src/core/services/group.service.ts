@@ -1,4 +1,4 @@
-import { GroupModel, IGroup } from "../data/group";
+import { GroupModel } from "../data/group";
 
 export const getAll = async () => {
   const groups = await GroupModel.find();

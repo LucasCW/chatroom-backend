@@ -5,7 +5,7 @@ interface IHistory {
   group: Types.ObjectId;
   time: Date;
   room: Types.ObjectId;
-  username: string;
+  user: Types.ObjectId;
 }
 
 interface IHistoryModel extends Model<IHistory> {}
@@ -27,9 +27,9 @@ const IHistorySchema = new Schema<IHistory, IHistoryModel>({
     type: Schema.Types.ObjectId,
     ref: "room",
   },
-  username: {
-    type: String,
-    required: true,
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: "user",
   },
 });
 
@@ -40,8 +40,14 @@ export const saveHistory = (
   group: Types.ObjectId,
   time: Date,
   room: Types.ObjectId,
-  username: string
+  user: Types.ObjectId
 ) => {
-  const history = new HistoryModel({ message, group, time, room, username });
+  const history = new HistoryModel({
+    message,
+    group,
+    time,
+    room,
+    user,
+  });
   return history.save();
 };

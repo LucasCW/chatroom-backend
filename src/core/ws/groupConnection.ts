@@ -1,12 +1,13 @@
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { Socket } from "socket.io";
 import { IGroup } from "../data/group";
 import { HistoryModel, saveHistory } from "../data/history";
 import { io } from "../share/wsServer";
+import { IUser } from "../data/user";
 
 interface Message {
   message: string;
-  username: string;
+  user: IUser;
   roomId: string;
   time: Date;
 }
@@ -31,19 +32,25 @@ const groupConnectionListener = (socket: Socket, group: IGroup) => {
 
 const newMessageListener = async (
   group: IGroup,
-  { message, username, roomId, time }: Message
+  { message, user: user, roomId, time }: Message
 ) => {
   // Save the message
   const newMessage = await saveHistory(
     message,
     group._id!,
     new Date(time),
-    new mongoose.Types.ObjectId(roomId as string),
-    username
+    new mongoose.Types.ObjectId(roomId),
+    user._id!
   );
 
-  // Send new message to the room
-  io.of(group.id).to(roomId).emit("broadcastMessage", newMessage);
+  const messageSaved = await HistoryModel.findOne({
+    _id: newMessage._id,
+  })
+    .populate("user")
+    .lean();
+
+  //   Send new message to the room
+  io.of(group.id).to(roomId).emit("broadcastMessage", messageSaved);
 };
 
 const joinRoomListener = async (
@@ -66,8 +73,10 @@ const joinRoomListener = async (
   const history = await HistoryModel.find({
     room: new mongoose.Types.ObjectId(roomId as string),
     group: group._id,
-  }).lean();
+  })
+    .populate("user")
+    .lean();
+
   socket.emit("history", history);
-  console.log(callback);
   callback(true);
 };
