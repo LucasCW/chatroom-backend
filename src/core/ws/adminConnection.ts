@@ -3,6 +3,7 @@ import { getAll, getAllWithRoomsPopulated } from "../services/group.service";
 import { io } from "../share/wsServer";
 import { initGroupConnectionListeners } from "./groupConnection";
 import { UserModel } from "../data/user";
+import * as UserService from "../services/user.service";
 
 const groupConnectionListenersRegistry = new Map<string, boolean>();
 const adminConnectionListenersRegistry = new Map<string, boolean>();
@@ -38,5 +39,9 @@ const findUserListener = async (
 
 const emitGroupsList = async () => {
   const allGroupsWithRoomPopulated = await getAllWithRoomsPopulated();
-  io.emit("groupsList", { groups: allGroupsWithRoomPopulated });
+  const allUsers = await UserService.getAll();
+  io.emit("groupsList", {
+    groups: allGroupsWithRoomPopulated,
+    users: allUsers,
+  });
 };
