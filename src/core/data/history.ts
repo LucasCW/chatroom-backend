@@ -37,7 +37,7 @@ export const HistoryModel = model("history", IHistorySchema);
 
 export const saveHistory = (
   message: string,
-  group: Types.ObjectId,
+  group: Types.ObjectId | null,
   time: Date,
   room: Types.ObjectId,
   user: Types.ObjectId

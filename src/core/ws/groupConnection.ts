@@ -1,11 +1,11 @@
-import mongoose, { Types } from "mongoose";
+import mongoose from "mongoose";
 import { Socket } from "socket.io";
 import { IGroup } from "../data/group";
 import { HistoryModel, saveHistory } from "../data/history";
-import { io } from "../share/wsServer";
 import { IUser } from "../data/user";
+import { io } from "../share/wsServer";
 
-interface Message {
+export interface Message {
   message: string;
   user: IUser;
   roomId: string;
@@ -13,9 +13,10 @@ interface Message {
 }
 
 export const initGroupConnectionListeners = (group: IGroup) => {
-  io.of(group.id).on("connection", (socket) =>
-    groupConnectionListener(socket, group)
-  );
+  io.of(group.id).on("connection", (socket) => {
+    console.log("group socket", socket.id);
+    groupConnectionListener(socket, group);
+  });
 };
 
 const groupConnectionListener = (socket: Socket, group: IGroup) => {
@@ -50,7 +51,9 @@ const newMessageListener = async (
     .lean();
 
   //   Send new message to the room
-  io.of(group.id).to(roomId).emit("broadcastMessage", messageSaved);
+  io.of(group.id)
+    .to(roomId)
+    .emit("broadcastMessage", { id: roomId, history: messageSaved });
 };
 
 const joinRoomListener = async (
@@ -77,6 +80,6 @@ const joinRoomListener = async (
     .populate("user")
     .lean();
 
-  socket.emit("history", history);
+  socket.emit("history", { id: roomId, histories: history });
   callback(true);
 };
