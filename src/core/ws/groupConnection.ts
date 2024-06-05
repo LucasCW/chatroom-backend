@@ -5,7 +5,7 @@ import { HistoryModel, saveHistory } from "../data/history";
 import { IUser } from "../data/user";
 import { io } from "../share/wsServer";
 
-export interface Message {
+interface Message {
   message: string;
   user: IUser;
   roomId: string;

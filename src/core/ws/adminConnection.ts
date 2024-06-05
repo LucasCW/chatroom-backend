@@ -61,7 +61,9 @@ const adminConnectionListener = async (socket: Socket) => {
     socket.on("loadPrivateChannels", async ({ userId }: { userId: string }) => {
       const privateChannels = await PrivateChannelModel.find({
         users: userId,
-      }).lean();
+      })
+        .populate("users")
+        .lean();
       socket.emit("privateChannelsLoaded", { privateChannels });
     });
     adminConnectionListenersRegistry.set(socket.id, true);
@@ -145,9 +147,20 @@ const onPrivateChatCreationHandler = async (
   console.log("hasPrivateChannel", hasPrivateChannel);
   if (!hasPrivateChannel) {
     const newPrivateChannel = await createPrivateChannel([creator, user]);
-    socket.emit("privateChatChannelCreated", {
-      privateChannel: newPrivateChannel,
+
+    const privateChannelCreated = await PrivateChannelModel.findOne({
+      _id: newPrivateChannel._id,
+    })
+      .populate("users")
+      .lean();
+
+    io.emit("privateChatChannelCreated", {
+      privateChannel: privateChannelCreated,
     });
+    socket.join(privateChannelCreated!._id.toString());
+    connectedAdminSocketRegistry
+      .get(user)!
+      .join(privateChannelCreated!._id.toString());
   }
 };
 
