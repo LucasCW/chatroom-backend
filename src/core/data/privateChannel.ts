@@ -23,12 +23,9 @@ export const PrivateChannelModel = model(
 );
 
 export const createPrivateChannel = (userIds: string[]) => {
-  console.log("userIds", userIds);
   const privateChannel = new PrivateChannelModel({
     users: userIds.map((id) => new Types.ObjectId(id)),
   });
-
-  console.log(privateChannel.users);
 
   return privateChannel.save();
 };
