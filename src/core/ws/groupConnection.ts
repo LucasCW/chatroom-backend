@@ -39,14 +39,6 @@ export const initGroupConnectionListeners = (group: IGroup) => {
 };
 
 const groupConnectionListener = (socket: Socket, group: IGroup) => {
-  // Join a room in a group.
-  socket.on(
-    "joinRoom",
-    (roomId: string, callback) =>
-      console.log("join room called on server", roomId)
-    // joinRoomListener(socket, roomId, group, callback)
-  );
-
   // handle new messages
   socket.on("newMessage", (newMessage: Message) =>
     newMessageListener(group, newMessage)
