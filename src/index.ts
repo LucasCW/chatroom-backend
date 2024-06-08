@@ -1,8 +1,12 @@
 import mongoose from "mongoose";
 import { httpServer } from "./core/share/expressServer";
-import { initAdminConnection } from "./core/ws/adminConnection";
+import {
+  initAdminConnection,
+  initGroupConnection,
+} from "./core/ws/adminConnection";
 
 initAdminConnection();
+initGroupConnection();
 
 const mongodbURL =
   "mongodb+srv://lucaschiwang:FyJjKUC5DtLmYqnZ@cluster0.mios5r0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";

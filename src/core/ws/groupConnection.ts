@@ -15,14 +15,36 @@ interface Message {
 export const initGroupConnectionListeners = (group: IGroup) => {
   io.of(group.id).on("connection", (socket) => {
     console.log("group socket", socket.id);
+    group.rooms.forEach(async (room) => {
+      socket.join(room._id.toString());
+
+      const history = await HistoryModel.find({
+        room: room._id,
+        group: group._id,
+      })
+        .populate("user")
+        .lean();
+
+      socket.emit("history", {
+        id: room._id.toString(),
+        histories: history,
+      });
+    });
     groupConnectionListener(socket, group);
+
+    socket.on("disconnect", (res) => {
+      console.log("socket disconnect", res);
+    });
   });
 };
 
 const groupConnectionListener = (socket: Socket, group: IGroup) => {
   // Join a room in a group.
-  socket.on("joinRoom", (roomId: string, callback) =>
-    joinRoomListener(socket, roomId, group, callback)
+  socket.on(
+    "joinRoom",
+    (roomId: string, callback) =>
+      console.log("join room called on server", roomId)
+    // joinRoomListener(socket, roomId, group, callback)
   );
 
   // handle new messages
@@ -35,6 +57,7 @@ const newMessageListener = async (
   group: IGroup,
   { message, user: user, roomId, time }: Message
 ) => {
+  console.log("got new message", message);
   // Save the message
   const newMessage = await saveHistory(
     message,
@@ -63,11 +86,11 @@ const joinRoomListener = async (
   callback: (result: boolean) => void
 ) => {
   // Leave all rooms
-  for (let s of socket.rooms) {
-    if (socket.id != s) {
-      socket.leave(s);
-    }
-  }
+  //   for (let s of socket.rooms) {
+  //     if (socket.id != s) {
+  //       socket.leave(s);
+  //     }
+  //   }
 
   // then join the new room
   socket.join(roomId);

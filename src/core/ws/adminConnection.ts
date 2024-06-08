@@ -1,5 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import { Socket } from "socket.io";
+import { HistoryModel, saveHistory } from "../data/history";
 import {
   PrivateChannelModel,
   createPrivateChannel,
@@ -9,7 +10,6 @@ import { getAll, getAllWithRoomsPopulated } from "../services/group.service";
 import * as UserService from "../services/user.service";
 import { io } from "../share/wsServer";
 import { initGroupConnectionListeners } from "./groupConnection";
-import { HistoryModel, saveHistory } from "../data/history";
 
 interface Message {
   message: string;
@@ -27,16 +27,20 @@ export const initAdminConnection = () => {
   io.on("connection", (socket) => adminConnectionListener(socket));
 };
 
-const adminConnectionListener = async (socket: Socket) => {
-  console.log("admin socket", socket.id);
-
+export const initGroupConnection = async () => {
   const allGroups = await getAll();
   allGroups.forEach((group) => {
     if (!groupConnectionListenersRegistry.has(group.id)) {
+      console.log("initiating group connection listener");
       initGroupConnectionListeners(group);
       groupConnectionListenersRegistry.set(group.id, true);
     }
   });
+};
+
+const adminConnectionListener = async (socket: Socket) => {
+  console.log("admin socket", socket.id);
+
   if (!adminConnectionListenersRegistry.has(socket.id)) {
     socket.on("findUser", (response) => findUserListener(socket, response));
     socket.on("login", (response) => loginHanddler(socket, response));
