@@ -111,7 +111,6 @@ const loginHanddler = async (
   { userId }: { userId: string }
 ) => {
   connectedAdminSocketRegistry.set(userId, socket);
-  //   console.log(connectedAdminSocketRegistry);
   socket.emit("loginSuccess");
 
   const privateChannels = await PrivateChannelModel.find({
@@ -124,8 +123,6 @@ const loginHanddler = async (
     })
       .populate("user")
       .lean();
-    console.log("history found", history);
-    console.log("history found", privateChannel.id);
 
     socket.join(privateChannel._id.toString());
     socket.emit("history", {

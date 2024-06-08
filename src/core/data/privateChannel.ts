@@ -2,6 +2,7 @@ import { Document, Model, Schema, Types, model } from "mongoose";
 
 export interface IPrivateChannel extends Document<Types.ObjectId> {
   users: Types.ObjectId[];
+  name: string;
 }
 
 interface IPrivateChannelModel extends Model<IPrivateChannel> {}
@@ -14,8 +15,16 @@ const IPrivateChannelSchema = new Schema<IPrivateChannel, IPrivateChannelModel>(
       required: true,
       default: [],
     },
+    name: {
+      type: String,
+    },
   }
 );
+
+IPrivateChannelSchema.pre("save", function (next) {
+  this.name = this._id.toString();
+  next();
+});
 
 export const PrivateChannelModel = model(
   "privateChannel",
