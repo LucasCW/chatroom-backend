@@ -47,7 +47,7 @@ const groupConnectionListener = (socket: Socket, group: IGroup) => {
 
 const newMessageListener = async (
   group: IGroup,
-  { message, user: user, roomId, time }: Message
+  { message, user, roomId, time }: Message
 ) => {
   console.log("got new message", message);
   // Save the message

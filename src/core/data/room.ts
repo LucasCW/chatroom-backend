@@ -1,6 +1,6 @@
 import { Model, Schema, Types, model } from "mongoose";
 
-enum RoomType {
+export enum RoomType {
   Private = "PRIVATE",
   Public = "PUBLIC",
 }
@@ -33,10 +33,19 @@ const IRoomSchema = new Schema<IRoom, IRoomModel>({
 
 export const RoomModel = model("room", IRoomSchema);
 
-export const createRoom = (name: string, path: string) => {
+export const createRoom = (name: string) => {
   const room = new RoomModel({
     name: name,
-    path: path,
   });
   return room.save();
+};
+
+export const createPrivateChannel = (userIds: string[]) => {
+  const privateChannel = new RoomModel({
+    roomType: RoomType.Private,
+    users: userIds.map((id) => new Types.ObjectId(id)),
+    name: "Temporary name",
+  });
+
+  return privateChannel.save();
 };

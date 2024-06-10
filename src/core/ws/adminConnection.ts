@@ -1,10 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import { Socket } from "socket.io";
 import { HistoryModel, saveHistory } from "../data/history";
-import {
-  PrivateChannelModel,
-  createPrivateChannel,
-} from "../data/privateChannel";
+import { RoomModel, RoomType, createPrivateChannel } from "../data/room";
 import { IUser, UserModel } from "../data/user";
 import { getAll, getAllWithRoomsPopulated } from "../services/group.service";
 import * as UserService from "../services/user.service";
@@ -53,9 +50,10 @@ const adminConnectionListener = async (socket: Socket) => {
       adminConnectionListenersRegistry.delete(socket.id);
     });
 
-    socket.on("onPrivateChatCreation", (payload) =>
-      onPrivateChatCreationHandler(socket, payload)
-    );
+    socket.on("onPrivateChatCreation", (payload) => {
+      console.log("payload", payload);
+      onPrivateChatCreationHandler(socket, payload);
+    });
 
     // handle new messages
     socket.on("newMessage", (newMessage: Message) =>
@@ -63,7 +61,8 @@ const adminConnectionListener = async (socket: Socket) => {
     );
 
     socket.on("loadPrivateChannels", async ({ userId }: { userId: string }) => {
-      const privateChannels = await PrivateChannelModel.find({
+      const privateChannels = await RoomModel.find({
+        roomType: RoomType.Private,
         users: userId,
       })
         .populate("users")
@@ -113,7 +112,8 @@ const loginHanddler = async (
   connectedAdminSocketRegistry.set(userId, socket);
   socket.emit("loginSuccess");
 
-  const privateChannels = await PrivateChannelModel.find({
+  const privateChannels = await RoomModel.find({
+    roomType: RoomType.Private,
     users: userId,
   }).lean();
 
@@ -141,15 +141,18 @@ const onPrivateChatCreationHandler = async (
   socket: Socket,
   { creator, user }: { creator: string; user: string }
 ) => {
-  console.log("private channel creation request received");
-  const users = [creator, user].forEach((id) => new Types.ObjectId(id));
-  const hasPrivateChannel = await PrivateChannelModel.exists({ users });
+  const users = [creator, user].map((id) => new Types.ObjectId(id));
+  const hasPrivateChannel = await RoomModel.exists({
+    roomType: RoomType.Private,
+  })
+    .where("users")
+    .all(users)
+    .size(users.length);
 
-  console.log("hasPrivateChannel", hasPrivateChannel);
   if (!hasPrivateChannel) {
     const newPrivateChannel = await createPrivateChannel([creator, user]);
 
-    const privateChannelCreated = await PrivateChannelModel.findOne({
+    const privateChannelCreated = await RoomModel.findOne({
       _id: newPrivateChannel._id,
     })
       .populate("users")
@@ -158,10 +161,11 @@ const onPrivateChatCreationHandler = async (
     io.emit("privateChatChannelCreated", {
       privateChannel: privateChannelCreated,
     });
+
     socket.join(privateChannelCreated!._id.toString());
     connectedAdminSocketRegistry
-      .get(user)!
-      .join(privateChannelCreated!._id.toString());
+      .get(user)
+      ?.join(privateChannelCreated!._id.toString());
   }
 };
 
