@@ -1,4 +1,4 @@
-import { GroupModel } from "../data/group";
+import { GroupModel, GroupType } from "../data/group";
 
 export const getAll = async () => {
   const groups = await GroupModel.find();
@@ -6,6 +6,5 @@ export const getAll = async () => {
 };
 
 export const getAllWithRoomsPopulated = async () => {
-  const groups = await GroupModel.find().populate("rooms");
-  return groups;
+  return await GroupModel.find({ type: GroupType.Public }).populate("rooms");
 };

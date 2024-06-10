@@ -1,4 +1,5 @@
 import { Model, Schema, Types, model } from "mongoose";
+import { GroupModel, GroupType } from "./group";
 
 export enum RoomType {
   Private = "PRIVATE",
@@ -40,12 +41,20 @@ export const createRoom = (name: string) => {
   return room.save();
 };
 
-export const createPrivateChannel = (userIds: string[]) => {
+export const createPrivateChannel = async (userIds: string[]) => {
   const privateChannel = new RoomModel({
     roomType: RoomType.Private,
     users: userIds.map((id) => new Types.ObjectId(id)),
     name: "Temporary name",
   });
+
+  const privateGroup = await GroupModel.findOne({
+    type: GroupType.Private,
+  });
+
+  privateGroup?.rooms.push(privateChannel._id);
+
+  await privateGroup!.save();
 
   return privateChannel.save();
 };

@@ -3,10 +3,14 @@ import { Socket } from "socket.io";
 import { HistoryModel, saveHistory } from "../data/history";
 import { RoomModel, RoomType, createPrivateChannel } from "../data/room";
 import { IUser, UserModel } from "../data/user";
-import { getAll, getAllWithRoomsPopulated } from "../services/group.service";
+import {
+  getAll,
+  getAllWithRoomsPopulated as getAllWithPublicRoomsPopulated,
+} from "../services/group.service";
 import * as UserService from "../services/user.service";
 import { io } from "../share/wsServer";
 import { initGroupConnectionListeners } from "./groupConnection";
+import { GroupModel, GroupType } from "../data/group";
 
 interface Message {
   message: string;
@@ -61,18 +65,22 @@ const adminConnectionListener = async (socket: Socket) => {
     );
 
     socket.on("loadPrivateChannels", async ({ userId }: { userId: string }) => {
+      const privateGroup = await GroupModel.findOne({
+        type: GroupType.Private,
+      }).lean();
+
       const privateChannels = await RoomModel.find({
         roomType: RoomType.Private,
         users: userId,
       })
         .populate("users")
         .lean();
-      socket.emit("privateChannelsLoaded", { privateChannels });
+      socket.emit("privateChannelsLoaded", { privateGroup, privateChannels });
     });
     adminConnectionListenersRegistry.set(socket.id, true);
   }
 
-  emitGroupsList();
+  emitGroupsList(socket);
 };
 
 const newMessageListener = async ({
@@ -177,10 +185,13 @@ const findUserListener = async (
   socket.emit("findUserResponse", { user: user });
 };
 
-const emitGroupsList = async () => {
-  const allGroupsWithRoomPopulated = await getAllWithRoomsPopulated();
+const emitGroupsList = async (socket: Socket) => {
+  const allGroupsWithRoomPopulated = await getAllWithPublicRoomsPopulated();
   const allUsers = await UserService.getAll();
-  io.emit("groupsList", {
+
+  console.log("groups returned: ", allGroupsWithRoomPopulated);
+
+  socket.emit("groupsList", {
     groups: allGroupsWithRoomPopulated,
     users: allUsers,
   });
