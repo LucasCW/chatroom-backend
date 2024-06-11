@@ -1,11 +1,11 @@
-import { Model, Schema, Types, model } from "mongoose";
+import { Model, Schema, Types, model, Document } from "mongoose";
 import { GroupModel, GroupType } from "./group";
 
 export enum RoomType {
   Private = "PRIVATE",
   Public = "PUBLIC",
 }
-export interface IRoom {
+export interface IRoom extends Document<Types.ObjectId> {
   users: Types.ObjectId[];
   name: string;
   roomType: string;

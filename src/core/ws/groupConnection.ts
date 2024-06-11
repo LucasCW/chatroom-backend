@@ -1,9 +1,12 @@
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { Socket } from "socket.io";
-import { IGroup } from "../data/group";
+import { GroupModel, GroupType, IGroup } from "../data/group";
 import { HistoryModel, saveHistory } from "../data/history";
+import { RoomModel, RoomType, createPrivateChannel } from "../data/room";
 import { IUser } from "../data/user";
 import { io } from "../share/wsServer";
+
+const connectedPrivateGroupSocketRegistry = new Map<string, Socket>();
 
 interface Message {
   message: string;
@@ -12,48 +15,150 @@ interface Message {
   time: Date;
 }
 
-export const initGroupConnectionListeners = (group: IGroup) => {
-  io.of(group.id).on("connection", (socket) => {
-    console.log("group socket", socket.id);
-    group.rooms.forEach(async (room) => {
-      socket.join(room._id.toString());
+const sendHistory = async (
+  socket: Socket,
+  group: Types.ObjectId,
+  room: Types.ObjectId
+) => {
+  const history = await HistoryModel.find({
+    room: room._id,
+    group: group._id,
+  })
+    .populate("user")
+    .lean();
 
-      const history = await HistoryModel.find({
-        room: room._id,
-        group: group._id,
-      })
-        .populate("user")
-        .lean();
+  socket.emit("history", {
+    id: room._id,
+    histories: history,
+  });
+};
 
-      socket.emit("history", {
-        id: room._id.toString(),
-        histories: history,
-      });
-    });
-    groupConnectionListener(socket, group);
+const joinRoom = (
+  socket: Socket,
+  groupId: Types.ObjectId,
+  roomId: Types.ObjectId
+) => {
+  sendHistory(socket, groupId, roomId);
+  socket.join(roomId._id.toString());
+};
 
-    socket.on("disconnect", (res) => {
-      console.log("socket disconnect", res);
+const loginHandler = async (socket: Socket, { userId }: { userId: string }) => {
+  connectedPrivateGroupSocketRegistry.set(userId, socket);
+
+  socket.emit("loginSuccess", userId);
+
+  const privateChannels = await RoomModel.find({
+    roomType: RoomType.Private,
+    users: userId,
+  }).lean();
+
+  privateChannels.forEach(async (privateChannel) => {
+    const history = await HistoryModel.find({
+      room: privateChannel._id,
+    })
+      .populate("user")
+      .lean();
+
+    socket.join(privateChannel._id.toString());
+    socket.emit("history", {
+      id: privateChannel._id.toString(),
+      histories: history,
     });
   });
 };
 
-const groupConnectionListener = (socket: Socket, group: IGroup) => {
+export const initGroupConnectionListeners = (group: IGroup) => {
+  io.of(group._id!.toString()).on("connection", async (socket) => {
+    if (group.type == GroupType.Private) {
+      socket.on("onPrivateChatCreation", (payload) => {
+        onPrivateChatCreationHandler(socket, payload, group._id!.toString());
+      });
+
+      socket.on("login", (response) => loginHandler(socket, response));
+      socket.on("logout", (response) => logoutHanddler(socket, response));
+
+      socket.on(
+        "loadPrivateChannels",
+        async ({ userId }: { userId: string }) => {
+          const privateGroup = await GroupModel.findOne({
+            type: GroupType.Private,
+          }).lean();
+
+          const privateChannels = await RoomModel.find({
+            roomType: RoomType.Private,
+            users: userId,
+          })
+            .populate("users")
+            .lean();
+          socket.emit("privateChannelsLoaded", {
+            privateGroup,
+            privateChannels,
+          });
+        }
+      );
+    } else {
+      group.rooms.forEach(async (room) =>
+        joinRoom(socket, group._id!, room._id)
+      );
+    }
+
+    groupConnectionListener(socket, group._id!);
+  });
+};
+
+const logoutHanddler = (socket: Socket, { userId }: { userId: string }) => {
+  socket.emit("logoutSuccess");
+};
+
+const onPrivateChatCreationHandler = async (
+  socket: Socket,
+  { creator, user }: { creator: string; user: string },
+  groupId: string
+) => {
+  const users = [creator, user].map((id) => new Types.ObjectId(id));
+  const hasPrivateChannel = await RoomModel.exists({
+    roomType: RoomType.Private,
+  })
+    .where("users")
+    .all(users)
+    .size(users.length);
+
+  if (!hasPrivateChannel) {
+    const newPrivateChannel = await createPrivateChannel([creator, user]);
+
+    const privateChannelCreated = await RoomModel.findOne({
+      _id: newPrivateChannel._id,
+    })
+      .populate("users")
+      .lean();
+
+    io.of(groupId).emit("privateChatChannelCreated", {
+      privateChannel: privateChannelCreated,
+    });
+
+    socket.join(privateChannelCreated!._id.toString());
+
+    connectedPrivateGroupSocketRegistry
+      .get(user)
+      ?.join(privateChannelCreated!._id.toString());
+  }
+};
+
+const groupConnectionListener = (socket: Socket, groupId: Types.ObjectId) => {
   // handle new messages
   socket.on("newMessage", (newMessage: Message) =>
-    newMessageListener(group, newMessage)
+    newMessageListener(groupId, newMessage)
   );
 };
 
 const newMessageListener = async (
-  group: IGroup,
+  groupId: Types.ObjectId,
   { message, user, roomId, time }: Message
 ) => {
-  console.log("got new message", message);
   // Save the message
   const newMessage = await saveHistory(
     message,
-    group._id!,
+    groupId,
     new Date(time),
     new mongoose.Types.ObjectId(roomId),
     user._id!
@@ -66,35 +171,7 @@ const newMessageListener = async (
     .lean();
 
   //   Send new message to the room
-  io.of(group.id)
+  io.of(groupId.toString())
     .to(roomId)
     .emit("broadcastMessage", { id: roomId, history: messageSaved });
-};
-
-const joinRoomListener = async (
-  socket: Socket,
-  roomId: string,
-  group: IGroup,
-  callback: (result: boolean) => void
-) => {
-  // Leave all rooms
-  //   for (let s of socket.rooms) {
-  //     if (socket.id != s) {
-  //       socket.leave(s);
-  //     }
-  //   }
-
-  // then join the new room
-  socket.join(roomId);
-
-  // find existing history and send it over.
-  const history = await HistoryModel.find({
-    room: new mongoose.Types.ObjectId(roomId as string),
-    group: group._id,
-  })
-    .populate("user")
-    .lean();
-
-  socket.emit("history", { id: roomId, histories: history });
-  callback(true);
 };

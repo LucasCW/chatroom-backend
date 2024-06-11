@@ -1,27 +1,46 @@
-import mongoose, { Types } from "mongoose";
 import { Socket } from "socket.io";
-import { HistoryModel, saveHistory } from "../data/history";
-import { RoomModel, RoomType, createPrivateChannel } from "../data/room";
-import { IUser, UserModel } from "../data/user";
+import { UserModel } from "../data/user";
 import {
   getAll,
   getAllWithRoomsPopulated as getAllWithPublicRoomsPopulated,
+  getEmptyPrivateGroup,
 } from "../services/group.service";
 import * as UserService from "../services/user.service";
 import { io } from "../share/wsServer";
 import { initGroupConnectionListeners } from "./groupConnection";
-import { GroupModel, GroupType } from "../data/group";
-
-interface Message {
-  message: string;
-  user: IUser;
-  roomId: string;
-  time: Date;
-}
 
 const groupConnectionListenersRegistry = new Map<string, boolean>();
 const adminConnectionListenersRegistry = new Map<string, boolean>();
-const connectedAdminSocketRegistry = new Map<string, Socket>();
+
+const socketRegistry = new Map<
+  string,
+  { privateGroup: Socket; publicGroups: Socket[] }
+>();
+
+const getPrivateGroupSocket = (userId: string) => {
+  return socketRegistry.get(userId)?.privateGroup;
+};
+
+const setPrivateGroupSocket = (userId: string, socket: Socket) => {
+  socketRegistry.get(userId) &&
+    (socketRegistry.get(userId)!.privateGroup = socket);
+};
+
+const setPublicGroupSocket = (userId: string, socket: Socket) => {
+  socketRegistry.get(userId) &&
+    socketRegistry.get(userId)!.publicGroups.push(socket);
+};
+
+const hasPublicGroupSocket = (userId: string, socket: Socket) => {
+  return (
+    socketRegistry.get(userId) &&
+    socketRegistry
+      .get(userId)!
+      .publicGroups.some(
+        (publicGroupSocket) => publicGroupSocket.id == socket.id
+      )
+  );
+};
 
 export const initAdminConnection = () => {
   // when connected to admin (/)
@@ -32,7 +51,6 @@ export const initGroupConnection = async () => {
   const allGroups = await getAll();
   allGroups.forEach((group) => {
     if (!groupConnectionListenersRegistry.has(group.id)) {
-      console.log("initiating group connection listener");
       initGroupConnectionListeners(group);
       groupConnectionListenersRegistry.set(group.id, true);
     }
@@ -40,141 +58,16 @@ export const initGroupConnection = async () => {
 };
 
 const adminConnectionListener = async (socket: Socket) => {
-  console.log("admin socket", socket.id);
-
   if (!adminConnectionListenersRegistry.has(socket.id)) {
     socket.on("findUser", (response) => findUserListener(socket, response));
-    socket.on("login", (response) => loginHanddler(socket, response));
-    socket.on("logout", (response) => logoutHanddler(socket, response));
-    socket.on("disconnect", (disconnectReason) => {
-      console.log(
-        "number of sockets connected to admin",
-        adminConnectionListenersRegistry.size
-      );
-      adminConnectionListenersRegistry.delete(socket.id);
-    });
-
-    socket.on("onPrivateChatCreation", (payload) => {
-      console.log("payload", payload);
-      onPrivateChatCreationHandler(socket, payload);
-    });
-
-    // handle new messages
-    socket.on("newMessage", (newMessage: Message) =>
-      newMessageListener(newMessage)
+    socket.on("disconnect", (disconnectReason) =>
+      adminConnectionListenersRegistry.delete(socket.id)
     );
 
-    socket.on("loadPrivateChannels", async ({ userId }: { userId: string }) => {
-      const privateGroup = await GroupModel.findOne({
-        type: GroupType.Private,
-      }).lean();
-
-      const privateChannels = await RoomModel.find({
-        roomType: RoomType.Private,
-        users: userId,
-      })
-        .populate("users")
-        .lean();
-      socket.emit("privateChannelsLoaded", { privateGroup, privateChannels });
-    });
     adminConnectionListenersRegistry.set(socket.id, true);
   }
 
   emitGroupsList(socket);
-};
-
-const newMessageListener = async ({
-  message,
-  user: user,
-  roomId: privateChannelId,
-  time,
-}: Message) => {
-  console.log("new Message Handdler called");
-  // Save the message
-  const newMessage = await saveHistory(
-    message,
-    null,
-    new Date(time),
-    new mongoose.Types.ObjectId(privateChannelId),
-    user._id!
-  );
-
-  const messageSaved = await HistoryModel.findOne({
-    _id: newMessage._id,
-  })
-    .populate("user")
-    .lean();
-
-  console.log("new message sent back", messageSaved);
-  //   Send new message to the room
-  io.to(privateChannelId).emit("broadcastMessage", {
-    id: privateChannelId,
-    history: messageSaved,
-  });
-};
-
-const loginHanddler = async (
-  socket: Socket,
-  { userId }: { userId: string }
-) => {
-  connectedAdminSocketRegistry.set(userId, socket);
-  socket.emit("loginSuccess");
-
-  const privateChannels = await RoomModel.find({
-    roomType: RoomType.Private,
-    users: userId,
-  }).lean();
-
-  privateChannels.forEach(async (privateChannel) => {
-    const history = await HistoryModel.find({
-      room: privateChannel._id,
-    })
-      .populate("user")
-      .lean();
-
-    socket.join(privateChannel._id.toString());
-    socket.emit("history", {
-      id: privateChannel._id.toString(),
-      histories: history,
-    });
-  });
-};
-
-const logoutHanddler = (socket: Socket, { userId }: { userId: string }) => {
-  connectedAdminSocketRegistry.delete(userId);
-  socket.emit("logoutSuccess");
-};
-
-const onPrivateChatCreationHandler = async (
-  socket: Socket,
-  { creator, user }: { creator: string; user: string }
-) => {
-  const users = [creator, user].map((id) => new Types.ObjectId(id));
-  const hasPrivateChannel = await RoomModel.exists({
-    roomType: RoomType.Private,
-  })
-    .where("users")
-    .all(users)
-    .size(users.length);
-
-  if (!hasPrivateChannel) {
-    const newPrivateChannel = await createPrivateChannel([creator, user]);
-
-    const privateChannelCreated = await RoomModel.findOne({
-      _id: newPrivateChannel._id,
-    })
-      .populate("users")
-      .lean();
-
-    io.emit("privateChatChannelCreated", {
-      privateChannel: privateChannelCreated,
-    });
-
-    socket.join(privateChannelCreated!._id.toString());
-    connectedAdminSocketRegistry
-      .get(user)
-      ?.join(privateChannelCreated!._id.toString());
-  }
 };
 
 const findUserListener = async (
@@ -187,12 +80,12 @@ const findUserListener = async (
 
 const emitGroupsList = async (socket: Socket) => {
   const allGroupsWithRoomPopulated = await getAllWithPublicRoomsPopulated();
+  const emptyPrivateGroup = await getEmptyPrivateGroup();
+
   const allUsers = await UserService.getAll();
 
-  console.log("groups returned: ", allGroupsWithRoomPopulated);
-
   socket.emit("groupsList", {
-    groups: allGroupsWithRoomPopulated,
+    groups: [...allGroupsWithRoomPopulated, emptyPrivateGroup],
     users: allUsers,
   });
 };
