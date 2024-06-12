@@ -1,0 +1,24 @@
+1. Review the whole back end codebase to 
+    a. Remove useless stuff
+    b. Update names so that they follow a pattern
+    c. Fix the methods which are too big and hard to understand.
+
+2. Add Unit tests.
+
+3. Reconnect, disconnect should be handled.
+
+4. Add authentication. (HTTP or WebSocket?)
+
+5. Update User Schema to include profile picture.
+
+6. Add User creation.
+
+7. Add Chatroom creation. (After authentication)
+
+8. Add feature: Video and/or Audio chat.
+
+9. Maintain a list of connected sockets?
+
+10. Move credentials like mongodb to config/env file.
+
+11. Create a script to rebuild the DB. !!!
